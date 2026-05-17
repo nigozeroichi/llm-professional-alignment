@@ -1,0 +1,144 @@
+Country,Year,Country_Code,CJ_index,CJ_effectiveness,CJ_impartial
+Afghanistan,2025,AFG,0.24,0.22,0.18
+Albania,2025,ALB,0.41,0.37,0.47
+Algeria,2025,DZA,0.42,0.46,0.60
+Angola,2025,AGO,0.34,0.24,0.37
+Antigua and Barbuda,2025,ATG,0.53,0.36,0.50
+Argentina,2025,ARG,0.38,0.26,0.50
+Australia,2025,AUS,0.72,0.62,0.55
+Austria,2025,AUT,0.78,0.81,0.69
+The Bahamas,2025,BHS,0.57,0.45,0.58
+Bangladesh,2025,BGD,0.32,0.30,0.24
+Barbados,2025,BRB,0.58,0.61,0.50
+Belarus,2025,BLR,0.38,0.40,0.48
+Belgium,2025,BEL,0.70,0.51,0.72
+Belize,2025,BLZ,0.40,0.22,0.46
+Benin,2025,BEN,0.41,0.33,0.61
+Bolivia,2025,BOL,0.19,0.19,0.25
+Bosnia and Herzegovina,2025,BIH,0.47,0.45,0.46
+Botswana,2025,BWA,0.58,0.54,0.64
+Brazil,2025,BRA,0.33,0.21,0.11
+Bulgaria,2025,BGR,0.45,0.32,0.48
+Burkina Faso,2025,BFA,0.47,0.40,0.51
+Cambodia,2025,KHM,0.27,0.29,0.25
+Cameroon,2025,CMR,0.23,0.17,0.31
+Canada,2025,CAN,0.72,0.65,0.54
+Chile,2025,CHL,0.54,0.35,0.52
+China,2025,CHN,0.45,0.58,0.37
+Colombia,2025,COL,0.31,0.17,0.31
+"Congo, Dem. Rep.",2025,COD,0.28,0.13,0.44
+"Congo, Rep.",2025,COG,0.34,0.29,0.46
+Costa Rica,2025,CRI,0.57,0.40,0.72
+Côte d'Ivoire,2025,CIV,0.36,0.32,0.46
+Croatia,2025,HRV,0.50,0.42,0.47
+Cyprus,2025,CYP,0.67,0.63,0.59
+Czechia,2025,CZE,0.70,0.59,0.67
+Denmark,2025,DNK,0.84,0.79,0.80
+Dominica,2025,DMA,0.56,0.38,0.60
+Dominican Republic,2025,DOM,0.39,0.27,0.45
+Ecuador,2025,ECU,0.30,0.12,0.30
+"Egypt, Arab Rep.",2025,EGY,0.34,0.21,0.33
+El Salvador,2025,SLV,0.20,0.21,0.11
+Estonia,2025,EST,0.76,0.75,0.78
+Ethiopia,2025,ETH,0.34,0.40,0.37
+Finland,2025,FIN,0.84,0.81,0.83
+France,2025,FRA,0.64,0.54,0.53
+Gabon,2025,GAB,0.30,0.27,0.49
+The Gambia,2025,GMB,0.40,0.16,0.38
+Georgia,2025,GEO,0.50,0.63,0.47
+Germany,2025,DEU,0.79,0.80,0.73
+Ghana,2025,GHA,0.45,0.36,0.53
+Greece,2025,GRC,0.50,0.35,0.42
+Grenada,2025,GRD,0.54,0.40,0.50
+Guatemala,2025,GTM,0.30,0.14,0.32
+Guinea,2025,GIN,0.31,0.18,0.44
+Guyana,2025,GUY,0.40,0.17,0.40
+Haiti,2025,HTI,0.24,0.12,0.29
+Honduras,2025,HND,0.27,0.17,0.30
+"Hong Kong SAR, China",2025,HKG,0.68,0.79,0.65
+Hungary,2025,HUN,0.44,0.41,0.24
+India,2025,IND,0.39,0.36,0.37
+Indonesia,2025,IDN,0.38,0.36,0.24
+"Iran, Islamic Rep.",2025,IRN,0.34,0.46,0.26
+Ireland,2025,IRL,0.74,0.64,0.63
+Italy,2025,ITA,0.63,0.51,0.64
+Jamaica,2025,JAM,0.48,0.30,0.51
+Japan,2025,JPN,0.76,0.83,0.77
+Jordan,2025,JOR,0.56,0.50,0.54
+Kazakhstan,2025,KAZ,0.46,0.46,0.44
+Kenya,2025,KEN,0.39,0.45,0.43
+"Korea, Rep.",2025,KOR,0.72,0.76,0.74
+Kosovo,2025,XKX,0.47,0.52,0.54
+Kuwait,2025,KWT,0.46,0.55,0.25
+Kyrgyz Republic,2025,KGZ,0.32,0.28,0.27
+Latvia,2025,LVA,0.68,0.66,0.73
+Lebanon,2025,LBN,0.32,0.24,0.17
+Liberia,2025,LBR,0.33,0.23,0.34
+Lithuania,2025,LTU,0.70,0.63,0.81
+Luxembourg,2025,LUX,0.73,0.76,0.58
+Madagascar,2025,MDG,0.33,0.22,0.40
+Malawi,2025,MWI,0.43,0.33,0.46
+Malaysia,2025,MYS,0.56,0.60,0.47
+Mali,2025,MLI,0.28,0.29,0.32
+Malta,2025,MLT,0.63,0.54,0.54
+Mauritania,2025,MRT,0.27,0.24,0.21
+Mauritius,2025,MUS,0.54,0.52,0.59
+Mexico,2025,MEX,0.25,0.21,0.16
+Moldova,2025,MDA,0.43,0.44,0.50
+Mongolia,2025,MNG,0.48,0.55,0.50
+Montenegro,2025,MNE,0.48,0.36,0.70
+Morocco,2025,MAR,0.38,0.31,0.37
+Mozambique,2025,MOZ,0.30,0.22,0.40
+Myanmar,2025,MMR,0.23,0.24,0.15
+Namibia,2025,NAM,0.54,0.43,0.62
+Nepal,2025,NPL,0.48,0.49,0.41
+Netherlands,2025,NLD,0.75,0.78,0.66
+New Zealand,2025,NZL,0.74,0.71,0.60
+Nicaragua,2025,NIC,0.25,0.22,0.22
+Niger,2025,NER,0.35,0.29,0.41
+Nigeria,2025,NGA,0.39,0.28,0.51
+North Macedonia,2025,MKD,0.46,0.39,0.55
+Norway,2025,NOR,0.82,0.90,0.71
+Pakistan,2025,PAK,0.35,0.33,0.27
+Panama,2025,PAN,0.34,0.17,0.31
+Paraguay,2025,PRY,0.26,0.09,0.36
+Peru,2025,PER,0.32,0.24,0.34
+Philippines,2025,PHL,0.31,0.22,0.20
+Poland,2025,POL,0.58,0.60,0.60
+Portugal,2025,PRT,0.57,0.41,0.48
+Qatar,2025,QAT,0.58,0.57,0.39
+Romania,2025,ROU,0.52,0.46,0.53
+Russian Federation,2025,RUS,0.29,0.31,0.30
+Rwanda,2025,RWA,0.56,0.49,0.78
+Senegal,2025,SEN,0.47,0.26,0.57
+Serbia,2025,SRB,0.37,0.41,0.38
+Sierra Leone,2025,SLE,0.37,0.33,0.45
+Singapore,2025,SGP,0.76,0.88,0.75
+Slovak Republic,2025,SVK,0.58,0.66,0.48
+Slovenia,2025,SVN,0.56,0.57,0.53
+South Africa,2025,ZAF,0.49,0.30,0.51
+Spain,2025,ESP,0.67,0.74,0.64
+Sri Lanka,2025,LKA,0.41,0.35,0.43
+St. Kitts and Nevis,2025,KNA,0.59,0.38,0.63
+St. Lucia,2025,LCA,0.55,0.45,0.62
+St. Vincent and the Grenadines,2025,VCT,0.59,0.55,0.54
+Sudan,2025,SDN,0.32,0.27,0.26
+Suriname,2025,SUR,0.52,0.39,0.58
+Sweden,2025,SWE,0.78,0.74,0.80
+Tanzania,2025,TZA,0.36,0.25,0.48
+Thailand,2025,THA,0.42,0.27,0.32
+Togo,2025,TGO,0.34,0.24,0.49
+Trinidad and Tobago,2025,TTO,0.30,0.15,0.19
+Tunisia,2025,TUN,0.40,0.33,0.37
+Türkiye,2025,TUR,0.34,0.34,0.24
+Uganda,2025,UGA,0.30,0.42,0.28
+Ukraine,2025,UKR,0.37,0.38,0.50
+United Arab Emirates,2025,ARE,0.68,0.83,0.60
+United Kingdom,2025,GBR,0.70,0.51,0.56
+United States,2025,USA,0.58,0.46,0.36
+Uruguay,2025,URY,0.59,0.32,0.63
+Uzbekistan,2025,UZB,0.46,0.64,0.35
+"Venezuela, RB",2025,VEN,0.11,0.07,0.10
+Vietnam,2025,VNM,0.48,0.47,0.51
+Zambia,2025,ZMB,0.41,0.31,0.47
+Zimbabwe,2025,ZWE,0.35,0.35,0.37

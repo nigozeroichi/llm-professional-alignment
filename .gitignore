@@ -1,0 +1,6 @@
+*_Experiment_Results*.csv
+Bayesian_*_Indexes*.csv
+Correlation_*.csv
+Correlation_Heatmap_*.png
+__pycache__/
+.ipynb_checkpoints/
