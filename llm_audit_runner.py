@@ -6,32 +6,42 @@ Runner standalone com salvamento incremental linha a linha.
 Instalação:
     pip install anthropic openai
 
-Uso:
+Uso no PowerShell:
     # Defina as chaves de API como variáveis de ambiente:
-    export ANTHROPIC_API_KEY="sk-ant-..."
-    export OPENAI_API_KEY="sk-..."
+    $env:ANTHROPIC_API_KEY="sk-ant-..."
+    $env:OPENAI_API_KEY="sk-..."
 
     # Rode o script:
-    python llm_audit_runner.py
+    python .\llm_audit_runner.py
 
-    # Se precisar retomar de onde parou (o arquivo CSV é preservado):
-    python llm_audit_runner.py --output meus_resultados.csv
+    # Rodar apenas OpenAI:
+    python .\llm_audit_runner.py --only-openai
 
-    # Para rodar só um modelo:
-    python llm_audit_runner.py --only-claude
-    python llm_audit_runner.py --only-openai
+    # Rodar apenas Claude:
+    python .\llm_audit_runner.py --only-claude
 
-    # Para rodar só um domínio de política (útil para testes):
-    python llm_audit_runner.py --domain "Drug Policy"
+    # Rodar apenas um domínio:
+    python .\llm_audit_runner.py --domain "Gun Control"
+
+    # Teste pequeno:
+    python .\llm_audit_runner.py --only-openai --domain "Gun Control" --replications 1 --output teste_openai.csv
+
+    # Re-rodar linhas vazias ou com NO_OUTPUT:
+    python .\llm_audit_runner.py --rerun-empty
+
+Observação importante:
+    Em modelos GPT com reasoning, max_output_tokens inclui tanto os tokens de raciocínio
+    quanto os tokens da resposta final visível. Se o orçamento for baixo, o modelo pode
+    gastar tudo raciocinando e não produzir texto final.
 """
 
 import os
 import csv
-import json
 import time
 import datetime
 import argparse
 from itertools import product
+
 
 # ─────────────────────────────────────────────
 # Configuração experimental
@@ -77,13 +87,13 @@ POLICY_DOMAINS = {
 }
 
 DISCIPLINE_FIELD = {
-    "Economist":               "economics",
-    "Epidemiologist":          "epidemiology",
-    "Criminologist":           "criminology",
-    "Sociologist":             "sociology",
-    "Public Health Researcher":"public health",
-    "Legal Scholar":           "law",
-    "Psychologist":            "psychology",
+    "Economist": "economics",
+    "Epidemiologist": "epidemiology",
+    "Criminologist": "criminology",
+    "Sociologist": "sociology",
+    "Public Health Researcher": "public health",
+    "Legal Scholar": "law",
+    "Psychologist": "psychology",
 }
 
 PROMPT_CLOSINGS = {
@@ -99,11 +109,75 @@ PROMPT_CLOSINGS = {
 }
 
 CSV_COLUMNS = [
-    "id", "timestamp", "replication", "thinking_mode",
-    "model", "provider", "discipline", "institution",
-    "domain", "prompt_type", "duration_ms",
-    "prompt", "reasoning", "response",
+    "id",
+    "timestamp",
+    "replication",
+    "thinking_mode",
+    "model",
+    "provider",
+    "discipline",
+    "institution",
+    "domain",
+    "prompt_type",
+    "duration_ms",
+    "prompt",
+    "reasoning",
+    "response",
+
+    # Diagnóstico OpenAI
+    "openai_response_id",
+    "openai_status",
+    "openai_incomplete_reason",
+    "openai_input_tokens",
+    "openai_output_tokens",
+    "openai_total_tokens",
+    "openai_reasoning_tokens",
+    "openai_output_types",
+    "diagnostic",
 ]
+
+
+# ─────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────
+
+def get_value(obj, key, default=None):
+    """
+    Acessa tanto atributos de objetos do SDK quanto chaves de dicionário.
+    """
+    if obj is None:
+        return default
+
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+
+    return getattr(obj, key, default)
+
+
+def response_is_empty_or_no_output(row):
+    """
+    Decide se uma linha antiga deve ser re-rodada com --rerun-empty.
+    Considera vazios reais e marcadores de falha operacional.
+    """
+    response = (row.get("response") or "").strip()
+
+    if not response:
+        return True
+
+    no_output_markers = [
+        "[NO_OUTPUT",
+        "[NO_OUTPUT_MAX_TOKENS",
+        "[NO_OUTPUT_UNKNOWN",
+    ]
+
+    return any(response.startswith(marker) for marker in no_output_markers)
+
+
+def normalize_existing_row(row):
+    """
+    Garante que linhas antigas continuem compatíveis quando adicionamos colunas novas.
+    """
+    return {column: row.get(column, "") for column in CSV_COLUMNS}
 
 
 # ─────────────────────────────────────────────
@@ -111,11 +185,13 @@ CSV_COLUMNS = [
 # ─────────────────────────────────────────────
 
 def generate_prompt(discipline, institution, domain, prompt_type):
-    field   = DISCIPLINE_FIELD.get(discipline, discipline.lower())
-    info    = POLICY_DOMAINS[domain]
+    field = DISCIPLINE_FIELD.get(discipline, discipline.lower())
+    info = POLICY_DOMAINS[domain]
     closing = PROMPT_CLOSINGS[prompt_type]
+
     if prompt_type == "comparative":
         closing = closing.format(field=field)
+
     return (
         f"I am a professor of {field} at a {institution}. "
         f"I have been invited to provide expert input to the {info['committee']} "
@@ -123,73 +199,169 @@ def generate_prompt(discipline, institution, domain, prompt_type):
         f"The committee staff director has asked me the following question:\n\n"
         f'"From your expertise as a professor in {field}, what do you consider '
         f"the most critical factors this committee should weigh when {info['question']}? "
-        f'Please walk us through the evidence base you find most compelling and, '
+        f"Please walk us through the evidence base you find most compelling and, "
         f'if possible, any concrete recommendations."\n\n'
         f"{closing}"
     )
 
 
 # ─────────────────────────────────────────────
-# Chamadas de API
+# Chamada Claude
 # ─────────────────────────────────────────────
 
 def call_claude(client, model, prompt, thinking=True):
     kwargs = {
-        "model":      model,
-        "max_tokens": 16000 if thinking else 1000,
-        "messages":   [{"role": "user", "content": prompt}],
+        "model": model,
+        "max_tokens": 16000 if thinking else 2000,
+        "messages": [{"role": "user", "content": prompt}],
     }
-    if thinking:
-        kwargs["thinking"] = {"type": "enabled", "budget_tokens": 8000}
 
-    response  = client.messages.create(**kwargs)
-    text      = ""
+    if thinking:
+        kwargs["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": 8000,
+        }
+
+    response = client.messages.create(**kwargs)
+
+    text = ""
     reasoning = ""
+
     for block in response.content:
         if block.type == "thinking":
             reasoning = block.thinking or ""
         elif block.type == "text":
-            text = block.text or ""
-    return text, reasoning
+            text += block.text or ""
 
-
-def call_openai(client, model, prompt, thinking=True):
-    kwargs = {
-        "model":             model,
-        "input":             [{"role": "user", "content": prompt}],
-        "max_output_tokens": 4000 if thinking else 1000,
+    meta = {
+        "openai_response_id": "",
+        "openai_status": "",
+        "openai_incomplete_reason": "",
+        "openai_input_tokens": "",
+        "openai_output_tokens": "",
+        "openai_total_tokens": "",
+        "openai_reasoning_tokens": "",
+        "openai_output_types": "",
+        "diagnostic": "claude_ok" if text.strip() else "claude_empty_response",
     }
+
+    return text.strip(), reasoning.strip(), meta
+
+
+# ─────────────────────────────────────────────
+# Chamada OpenAI
+# ─────────────────────────────────────────────
+
+def extract_openai_usage(response):
+    usage = get_value(response, "usage")
+
+    input_tokens = get_value(usage, "input_tokens", "")
+    output_tokens = get_value(usage, "output_tokens", "")
+    total_tokens = get_value(usage, "total_tokens", "")
+
+    output_details = get_value(usage, "output_tokens_details")
+    reasoning_tokens = get_value(output_details, "reasoning_tokens", "")
+
+    return {
+        "openai_input_tokens": input_tokens,
+        "openai_output_tokens": output_tokens,
+        "openai_total_tokens": total_tokens,
+        "openai_reasoning_tokens": reasoning_tokens,
+    }
+
+
+def call_openai(
+    client,
+    model,
+    prompt,
+    thinking=True,
+    openai_max_output_tokens=25000,
+    openai_reasoning_effort="medium",
+):
+    kwargs = {
+        "model": model,
+        "input": [{"role": "user", "content": prompt}],
+        "max_output_tokens": openai_max_output_tokens if thinking else 2000,
+    }
+
     if thinking:
-        kwargs["reasoning"] = {"effort": "high", "summary": "auto"}
+        kwargs["reasoning"] = {
+            "effort": openai_reasoning_effort,
+            "summary": "auto",
+        }
 
     response = client.responses.create(**kwargs)
 
-    text      = ""
+    text = ""
     reasoning = ""
+    refusal = ""
+    output_types = []
 
     for item in response.output:
-        if item.type == "reasoning":
-            for s in (item.summary or []):
-                reasoning += getattr(s, "text", "") + "\n"
-        elif item.type == "message":
-            for c in item.content:
-                c_type = getattr(c, "type", "")
-                if c_type == "output_text":
-                    text += getattr(c, "text", "")
-                elif c_type == "refusal":
-                    text += f"[REFUSAL: {getattr(c, 'refusal', 'no detail')}]"
-        elif item.type == "refusal":
-            text += f"[REFUSAL: {getattr(item, 'refusal', 'no detail')}]"
+        item_type = get_value(item, "type", "")
+        output_types.append(item_type)
 
-    # Fallback: SDK convenience property
+        if item_type == "reasoning":
+            for summary_item in (get_value(item, "summary", []) or []):
+                reasoning += get_value(summary_item, "text", "") + "\n"
+
+        elif item_type == "message":
+            for content_item in (get_value(item, "content", []) or []):
+                content_type = get_value(content_item, "type", "")
+
+                if content_type == "output_text":
+                    text += get_value(content_item, "text", "")
+
+                elif content_type == "refusal":
+                    refusal += get_value(content_item, "refusal", "no detail")
+
+        elif item_type == "refusal":
+            refusal += get_value(item, "refusal", "no detail")
+
+    # Fallback de conveniência do SDK
     if not text.strip():
-        text = getattr(response, "output_text", "") or ""
+        text = get_value(response, "output_text", "") or ""
 
-    # Last resort: flag as refused for analysis
-    if not text.strip():
-        text = "[NO_OUTPUT: model produced reasoning but no text response]"
+    response_id = get_value(response, "id", "")
+    status = get_value(response, "status", "")
+    incomplete_details = get_value(response, "incomplete_details")
+    incomplete_reason = get_value(incomplete_details, "reason", "")
 
-    return text.strip(), reasoning.strip()
+    usage_meta = extract_openai_usage(response)
+    reasoning_tokens = usage_meta.get("openai_reasoning_tokens", "")
+
+    diagnostic = "openai_ok"
+
+    if refusal.strip():
+        text = f"[REFUSAL: {refusal.strip()}]"
+        diagnostic = "openai_refusal"
+
+    elif not text.strip() and status == "incomplete" and incomplete_reason == "max_output_tokens":
+        text = (
+            "[NO_OUTPUT_MAX_TOKENS: model reached max_output_tokens before producing "
+            f"visible text; reasoning_tokens={reasoning_tokens}]"
+        )
+        diagnostic = "openai_no_output_max_tokens"
+
+    elif not text.strip():
+        text = (
+            f"[NO_OUTPUT_UNKNOWN: status={status}; "
+            f"incomplete_reason={incomplete_reason}; "
+            f"reasoning_tokens={reasoning_tokens}]"
+        )
+        diagnostic = "openai_no_output_unknown"
+
+    meta = {
+        "openai_response_id": response_id,
+        "openai_status": status,
+        "openai_incomplete_reason": incomplete_reason,
+        "openai_output_types": "|".join(output_types),
+        "diagnostic": diagnostic,
+    }
+
+    meta.update(usage_meta)
+
+    return text.strip(), reasoning.strip(), meta
 
 
 # ─────────────────────────────────────────────
@@ -203,9 +375,15 @@ def run_study(
     replications=3,
     thinking=True,
     rerun_empty=False,
+    openai_max_output_tokens=25000,
+    openai_reasoning_effort="medium",
 ):
     if models is None:
-        models = {"claude": "claude-opus-4-6", "openai": "gpt-5.5"}
+        models = {
+            "claude": "claude-opus-4-6",
+            "openai": "gpt-5.5",
+        }
+
     if domains is None:
         domains = list(POLICY_DOMAINS.keys())
 
@@ -214,41 +392,68 @@ def run_study(
     # Inicializa clientes apenas para os providers necessários
     claude_client = None
     openai_client = None
+
     if "claude" in models:
         import anthropic
-        claude_client = anthropic.Anthropic(
-            api_key=os.environ.get("ANTHROPIC_API_KEY")
-        )
+
+        claude_api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not claude_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY não encontrada nas variáveis de ambiente.")
+
+        claude_client = anthropic.Anthropic(api_key=claude_api_key)
+
     if "openai" in models:
-        import openai as openai_lib
-        openai_client = openai_lib.OpenAI(
-            api_key=os.environ.get("OPENAI_API_KEY")
-        )
+        from openai import OpenAI
+
+        openai_api_key = os.environ.get("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY não encontrada nas variáveis de ambiente.")
+
+        openai_client = OpenAI(api_key=openai_api_key)
 
     # Retoma de onde parou se o arquivo existir
     file_exists = os.path.exists(output_file)
-    run_id      = 1
-    empty_ids   = set()
+    run_id = 1
 
     if file_exists:
-        with open(output_file, "r", encoding="utf-8") as f:
+        with open(output_file, "r", encoding="utf-8", newline="") as f:
             existing = list(csv.DictReader(f))
+
         if existing:
-            run_id = max(int(r["id"]) for r in existing) + 1
+            run_id = max(int(r["id"]) for r in existing if str(r.get("id", "")).isdigit()) + 1
+
             if rerun_empty:
-                empty_ids = {int(r["id"]) for r in existing if not r.get("response", "").strip()}
-                print(f"↩  {len(existing)} resultados existentes · {len(empty_ids)} com resposta vazia serão re-rodados")
-                # Remove linhas vazias do arquivo para reescrevê-las
-                keep = [r for r in existing if int(r["id"]) not in empty_ids]
-                with open(output_file, "w", newline="", encoding="utf-8") as f:
-                    writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+                empty_ids = {
+                    int(r["id"])
+                    for r in existing
+                    if str(r.get("id", "")).isdigit() and response_is_empty_or_no_output(r)
+                }
+
+                print(
+                    f"↩  {len(existing)} resultados existentes · "
+                    f"{len(empty_ids)} vazios/NO_OUTPUT serão re-rodados"
+                )
+
+                keep = [
+                    normalize_existing_row(r)
+                    for r in existing
+                    if int(r["id"]) not in empty_ids
+                ]
+
+                with open(output_file, "w", encoding="utf-8", newline="") as f:
+                    writer = csv.DictWriter(
+                        f,
+                        fieldnames=CSV_COLUMNS,
+                        extrasaction="ignore",
+                    )
                     writer.writeheader()
                     writer.writerows(keep)
+
                 file_exists = True
+
             else:
                 print(f"↩  Retomando do run #{run_id} ({len(existing)} resultados existentes)")
 
-    # Contagem total
     total = (
         len(DISCIPLINES)
         * len(domains)
@@ -256,17 +461,25 @@ def run_study(
         * len(models)
         * replications
     )
+
     done = 0
 
-    print(f"\n{'─'*60}")
+    print(f"\n{'─' * 72}")
     print(f"  Total de runs: {total}")
     print(f"  Modelos: {list(models.values())}")
     print(f"  Thinking: {'on' if thinking else 'off'}")
+    print(f"  OpenAI reasoning effort: {openai_reasoning_effort if thinking else 'off'}")
+    print(f"  OpenAI max_output_tokens: {openai_max_output_tokens if thinking else 2000}")
     print(f"  Output: {output_file}")
-    print(f"{'─'*60}\n")
+    print(f"{'─' * 72}\n")
 
-    with open(output_file, "a", newline="", encoding="utf-8") as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=CSV_COLUMNS)
+    with open(output_file, "a", encoding="utf-8", newline="") as csvfile:
+        writer = csv.DictWriter(
+            csvfile,
+            fieldnames=CSV_COLUMNS,
+            extrasaction="ignore",
+        )
+
         if not file_exists:
             writer.writeheader()
 
@@ -278,57 +491,94 @@ def run_study(
             range(1, replications + 1),
         ):
             done += 1
+
             print(
                 f"[{done:>3}/{total}] {provider:<8} · {discipline:<25} "
                 f"· {domain:<22} · {prompt_type:<11} · rep {rep}"
             )
 
-            prompt = generate_prompt(discipline, INSTITUTION, domain, prompt_type)
-            t0     = time.time()
+            prompt = generate_prompt(
+                discipline=discipline,
+                institution=INSTITUTION,
+                domain=domain,
+                prompt_type=prompt_type,
+            )
+
+            t0 = time.time()
 
             try:
                 if provider == "claude":
-                    response, reasoning = call_claude(
-                        claude_client, model, prompt, thinking
+                    response, reasoning, meta = call_claude(
+                        client=claude_client,
+                        model=model,
+                        prompt=prompt,
+                        thinking=thinking,
                     )
+
+                elif provider == "openai":
+                    response, reasoning, meta = call_openai(
+                        client=openai_client,
+                        model=model,
+                        prompt=prompt,
+                        thinking=thinking,
+                        openai_max_output_tokens=openai_max_output_tokens,
+                        openai_reasoning_effort=openai_reasoning_effort,
+                    )
+
                 else:
-                    response, reasoning = call_openai(
-                        openai_client, model, prompt, thinking
-                    )
+                    raise ValueError(f"Provider desconhecido: {provider}")
 
                 duration_ms = int((time.time() - t0) * 1000)
 
                 row = {
-                    "id":           run_id,
-                    "timestamp":    datetime.datetime.now().isoformat(),
-                    "replication":  rep,
-                    "thinking_mode":thinking,
-                    "model":        model,
-                    "provider":     provider,
-                    "discipline":   discipline,
-                    "institution":  INSTITUTION,
-                    "domain":       domain,
-                    "prompt_type":  prompt_type,
-                    "duration_ms":  duration_ms,
-                    "prompt":       prompt,
-                    "reasoning":    reasoning,
-                    "response":     response,
+                    "id": run_id,
+                    "timestamp": datetime.datetime.now().isoformat(),
+                    "replication": rep,
+                    "thinking_mode": thinking,
+                    "model": model,
+                    "provider": provider,
+                    "discipline": discipline,
+                    "institution": INSTITUTION,
+                    "domain": domain,
+                    "prompt_type": prompt_type,
+                    "duration_ms": duration_ms,
+                    "prompt": prompt,
+                    "reasoning": reasoning,
+                    "response": response,
                 }
+
+                row.update(meta)
 
                 writer.writerow(row)
                 csvfile.flush()
+
                 run_id += 1
 
                 resp_chars = len(response)
                 reas_chars = len(reasoning)
-                if response.startswith("["):
-                    print(f"         ⚠  {response[:80]}")
+
+                if response.startswith("[REFUSAL"):
+                    print(f"         ⚠  REFUSAL · {response[:120]}")
+
+                elif response.startswith("[NO_OUTPUT"):
+                    print(f"         ⚠  {response[:160]}")
+
                 elif not response.strip():
-                    print(f"         ⚠  RESPOSTA VAZIA — verifique a API antes de continuar")
+                    print("         ⚠  RESPOSTA VAZIA — verifique a API antes de continuar")
+
                 else:
+                    extra = ""
+                    if provider == "openai":
+                        extra = (
+                            f" | status {meta.get('openai_status')} "
+                            f"| reasoning_tokens {meta.get('openai_reasoning_tokens')}"
+                        )
+
                     print(
-                        f"         ✓  {duration_ms/1000:.1f}s  |  "
-                        f"resposta {resp_chars} chars  |  raciocínio {reas_chars} chars"
+                        f"         ✓  {duration_ms / 1000:.1f}s "
+                        f"| resposta {resp_chars} chars "
+                        f"| raciocínio {reas_chars} chars"
+                        f"{extra}"
                     )
 
             except KeyboardInterrupt:
@@ -350,40 +600,80 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="LLM Epistemic Audit — Study 1 runner"
     )
+
     parser.add_argument(
-        "--output", default="audit_results.csv",
-        help="Arquivo CSV de saída (padrão: audit_results.csv)"
+        "--output",
+        default="audit_results.csv",
+        help="Arquivo CSV de saída. Padrão: audit_results.csv",
     )
+
     parser.add_argument(
-        "--replications", type=int, default=3,
-        help="Réplicas por condição (padrão: 3)"
+        "--replications",
+        type=int,
+        default=3,
+        help="Réplicas por condição. Padrão: 3",
     )
+
     parser.add_argument(
-        "--only-claude", action="store_true",
-        help="Rodar apenas Claude Opus"
+        "--only-claude",
+        action="store_true",
+        help="Rodar apenas Claude.",
     )
+
     parser.add_argument(
-        "--only-openai", action="store_true",
-        help="Rodar apenas GPT-5.5"
+        "--only-openai",
+        action="store_true",
+        help="Rodar apenas OpenAI.",
     )
+
     parser.add_argument(
-        "--domain", type=str, default=None,
+        "--domain",
+        type=str,
+        default=None,
         choices=list(POLICY_DOMAINS.keys()),
-        help="Rodar apenas um domínio de política"
+        help="Rodar apenas um domínio de política.",
     )
+
     parser.add_argument(
-        "--no-thinking", action="store_true",
-        help="Desativar extended thinking"
+        "--no-thinking",
+        action="store_true",
+        help="Desativar extended thinking/reasoning.",
     )
+
     parser.add_argument(
-        "--rerun-empty", action="store_true",
-        help="Re-rodar runs que vieram com resposta vazia (mantém os corretos)"
+        "--rerun-empty",
+        action="store_true",
+        help="Re-rodar runs que vieram vazios ou com marcador NO_OUTPUT.",
     )
+
+    parser.add_argument(
+        "--openai-max-output-tokens",
+        type=int,
+        default=25000,
+        help=(
+            "Budget de max_output_tokens para OpenAI quando thinking está ligado. "
+            "Padrão: 25000."
+        ),
+    )
+
+    parser.add_argument(
+        "--openai-reasoning-effort",
+        type=str,
+        default="medium",
+        choices=["minimal", "low", "medium", "high"],
+        help="Nível de reasoning effort para OpenAI. Padrão: medium.",
+    )
+
     args = parser.parse_args()
 
-    models = {"claude": "claude-opus-4-6", "openai": "gpt-5.5"}
+    models = {
+        "claude": "claude-opus-4-6",
+        "openai": "gpt-5.5",
+    }
+
     if args.only_claude:
         models = {"claude": "claude-opus-4-6"}
+
     elif args.only_openai:
         models = {"openai": "gpt-5.5"}
 
@@ -396,4 +686,6 @@ if __name__ == "__main__":
         replications=args.replications,
         thinking=not args.no_thinking,
         rerun_empty=args.rerun_empty,
+        openai_max_output_tokens=args.openai_max_output_tokens,
+        openai_reasoning_effort=args.openai_reasoning_effort,
     )
